@@ -32,6 +32,7 @@ class GraphWidget(QWidget):
         self.azimuth = 45
         self.elevation = 30
         self.last_mouse_pos = None
+        self.scale_factor = 1.0  # Коэффициент масштабирования
         self.draw_axes_after = draw_axes_after
         self.x_min = x_min
         self.x_max = x_max
@@ -62,22 +63,29 @@ class GraphWidget(QWidget):
 
         painter.end()
 
+    def wheelEvent(self, event):
+        """Обрабатывает прокрутку колесика мыши для масштабирования графика."""
+        delta = event.angleDelta().y()
+        scale_step = 0.1
+        if delta > 0:
+            self.scale_factor *= (1 + scale_step)
+        else:
+            self.scale_factor /= (1 + scale_step)
+        self.update()
+
     def project_point(self, x, y, z, offset):
-        """
-        Проецирует 3D точку (x, y, z) на 2D экран с учетом вращения.
-        Сначала выполняется поворот вокруг оси Z (азимут), затем наклон (elevation) вокруг оси X.
-        """
-        # Вращение вокруг оси Z: поворот в плоскости XY
+        """Проецирует 3D точку (x, y, z) на 2D экран с учетом вращения и масштабирования."""
         rad_az = math.radians(self.azimuth)
         X1 = x * math.cos(rad_az) - y * math.sin(rad_az)
         Y1 = x * math.sin(rad_az) + y * math.cos(rad_az)
         Z1 = z
-        # Наклон вокруг оси X: поворот в плоскости YZ
         rad_el = math.radians(self.elevation)
         Y2 = Y1 * math.cos(rad_el) - Z1 * math.sin(rad_el)
         Z2 = Y1 * math.sin(rad_el) + Z1 * math.cos(rad_el)
-        # Для ортографической проекции используем X1 и Y2
-        return QPointF(X1 + offset.x(), Y2 + offset.y())
+
+        # Учитываем масштабирование
+        return QPointF((X1 * self.scale_factor) + offset.x(),
+                       (Y2 * self.scale_factor) + offset.y())
 
     def draw_cuboid(self, painter, x, y, z, w, d, h, offset, color):
         # Вычисляем 8 вершин параллелепипеда
