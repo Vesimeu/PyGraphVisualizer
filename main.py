@@ -116,8 +116,9 @@ class GraphWidget(QWidget):
         if not self.bars:
             return
 
-        pen = QPen(Qt.black, 2)
-        painter.setPen(pen)
+        # Цвет осей - тёмно-серый, толщина 5px
+        axis_pen = QPen(QColor(50, 50, 50), 5)
+        painter.setPen(axis_pen)
 
         # Определяем начальную точку (левый нижний угол)
         origin = self.project_point(x_min, 0, 0, offset)
@@ -127,28 +128,49 @@ class GraphWidget(QWidget):
         painter.drawLine(origin, x_end)
         self.draw_arrow(painter, origin, x_end)
 
-        # Ось Z (значения функций)
+        # Ось Z
         z_end = self.project_point(x_min, 0, z_max, offset)
         painter.drawLine(origin, z_end)
         self.draw_arrow(painter, origin, z_end)
 
-        # Отметки по оси X (значения вдоль столбцов)
+        # Добавляем светлую линию поверх осей (имитация объёмности)
+        shadow_pen = QPen(QColor(200, 200, 200), 2, Qt.DashLine)
+        painter.setPen(shadow_pen)
+        painter.drawLine(origin + QPointF(1, 1), x_end + QPointF(1, 1))
+        painter.drawLine(origin + QPointF(1, 1), z_end + QPointF(1, 1))
+
+        # Вспомогательная пунктирная сетка
+        grid_pen = QPen(QColor(150, 150, 150), 1, Qt.DashLine)
+        painter.setPen(grid_pen)
+
+        # Вертикальные линии сетки (по X)
         for i in range(0, len(x_values), x_tick_step):
-            x_pos = self.bars[i].x + self.bars[i].width / 2  # Центр столбца
-            tick_pt = self.project_point(x_pos, 0, 0, offset)
+            x_pos = self.bars[i].x + self.bars[i].width / 2
+            grid_start = self.project_point(x_pos, 0, 0, offset)
+            grid_end = self.project_point(x_pos, 0, z_max, offset)
+            painter.drawLine(grid_start, grid_end)
 
-            # Сдвигаем текст вниз, чтобы он не пересекался со столбцами
-            painter.drawText(tick_pt + QPointF(-10, 15), f"{x_values[i]:.1f}")
-
-        # Отметки по оси Z (значения от z_min до z_max)
+        # Горизонтальные линии сетки (по Z)
         tick_interval_z = (z_max - z_min) / 5
         current_z = z_min
         while current_z <= z_max:
+            grid_start = self.project_point(x_min, 0, current_z, offset)
+            grid_end = self.project_point(x_max, 0, current_z, offset)
+            painter.drawLine(grid_start, grid_end)
+            current_z += tick_interval_z
+
+        # Подписи оси X
+        painter.setPen(QPen(Qt.black, 2))
+        for i in range(0, len(x_values), x_tick_step):
+            x_pos = self.bars[i].x + self.bars[i].width / 2
+            tick_pt = self.project_point(x_pos, 0, 0, offset)
+            painter.drawText(tick_pt + QPointF(-10, 25), f"{x_values[i]:.1f}")
+
+        # Подписи оси Z
+        current_z = z_min
+        while current_z <= z_max:
             tick_pt = self.project_point(x_min, 0, current_z, offset)
-
-            # Сдвигаем текст, чтобы он не налезал на ось
             painter.drawText(tick_pt + QPointF(-25, 0), f"{current_z / 50:.2f}")
-
             current_z += tick_interval_z
 
     def draw_arrow(self, painter, start, end):
