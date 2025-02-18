@@ -4,6 +4,7 @@ import json
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QTabWidget
 from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen
 from PySide6.QtCore import Qt, QPointF
+from utils import get_x_range, get_function_range
 
 
 # Класс для представления отдельного столбца (бара) гистограммы
@@ -23,7 +24,7 @@ class Bar:
 
 # Виджет для отрисовки одного графика с возможностью интерактивного вращения
 class GraphWidget(QWidget):
-    def __init__(self, bars, draw_axes_after=False, parent=None):
+    def __init__(self, bars, x_min=None, x_max=None, z_min=None, z_max=None, draw_axes_after=False, parent=None):
         super().__init__(parent)
         self.bars = bars
         # Параметры для вращения (азимут и угол наклона)
@@ -32,6 +33,10 @@ class GraphWidget(QWidget):
         self.last_mouse_pos = None
         # Флаг: оси рисовать после баров (на переднем плане) или перед (на заднем плане)
         self.draw_axes_after = draw_axes_after
+        self.x_min = x_min
+        self.x_max = x_max
+        self.z_min = z_min
+        self.z_max = z_max
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -41,7 +46,7 @@ class GraphWidget(QWidget):
 
         # Если оси нужно рисовать на заднем плане, то сначала рисуем оси
         if not self.draw_axes_after:
-            self.draw_axes(painter, center_offset)
+            self.draw_axes(painter, center_offset, self.x_min, self.x_max, self.z_min, self.z_max)
 
         # Отрисовка баров (накопление реализовано путем последовательного сложения сегментов)
         for bar in self.bars:
@@ -105,73 +110,47 @@ class GraphWidget(QWidget):
         painter.setBrush(QBrush(color.darker(150)))
         painter.drawPolygon(QPolygonF(front_face))
 
-    def draw_axes(self, painter, offset):
+    def draw_axes(self, painter, offset, x_min, x_max, z_min, z_max):
         """
         Отрисовка осей:
          - X: горизонтальная (категорий),
          - Y: ось глубины,
          - Z: вертикальная (значений).
         Оси снабжены стрелками и отметками.
+        Отрисовка осей с учётом реальных диапазонов значений
         """
         if not self.bars:
             return
 
-        # Определяем границы по барам
-        min_x = min(bar.x for bar in self.bars)
-        max_x = max(bar.x + bar.width for bar in self.bars)
-        min_y = min(bar.y for bar in self.bars)
-        max_y = max(bar.y + bar.depth for bar in self.bars)
-        max_z = max(sum(h for h, _ in bar.segments) for bar in self.bars)
-
         pen = QPen(Qt.black, 2)
         painter.setPen(pen)
 
-        # Начало координат – точка (min_x, min_y, 0)
-        origin = self.project_point(min_x, min_y, 0, offset)
-        # Ось X: от (min_x, min_y, 0) до (max_x, min_y, 0)
-        x_end = self.project_point(max_x, min_y, 0, offset)
+        origin = self.project_point(x_min, 0, 0, offset)
+
+        # Ось X
+        x_end = self.project_point(x_max, 0, 0, offset)
         painter.drawLine(origin, x_end)
         self.draw_arrow(painter, origin, x_end)
 
-        # Ось Y: от (min_x, min_y, 0) до (min_x, max_y, 0)
-        y_end = self.project_point(min_x, max_y, 0, offset)
-        painter.drawLine(origin, y_end)
-        self.draw_arrow(painter, origin, y_end)
-
-        # Ось Z: от (min_x, min_y, 0) до (min_x, min_y, max_z)
-        z_end = self.project_point(min_x, min_y, max_z, offset)
+        # Ось Z (значений функций)
+        z_end = self.project_point(x_min, 0, z_max, offset)
         painter.drawLine(origin, z_end)
         self.draw_arrow(painter, origin, z_end)
 
         # Отметки по оси X
-        tick_interval_x = 50
-        tick_length = 5
-        current_x = min_x
-        while current_x <= max_x:
-            tick_pt = self.project_point(current_x, min_y, 0, offset)
-            dx = x_end.x() - origin.x()
-            dy = x_end.y() - origin.y()
-            length = math.hypot(dx, dy)
-            perp = QPointF(-dy / length, dx / length) if length != 0 else QPointF(0, 0)
-            tick_start = QPointF(tick_pt.x() + perp.x() * tick_length, tick_pt.y() + perp.y() * tick_length)
-            tick_end = QPointF(tick_pt.x() - perp.x() * tick_length, tick_pt.y() - perp.y() * tick_length)
-            painter.drawLine(tick_start, tick_end)
-            painter.drawText(tick_pt + QPointF(5, 5), f"{current_x:.0f}")
+        tick_interval_x = (x_max - x_min) / 10
+        current_x = x_min
+        while current_x <= x_max:
+            tick_pt = self.project_point(current_x, 0, 0, offset)
+            painter.drawText(tick_pt + QPointF(5, 5), f"{int((current_x - x_min) / (10 + 2))}")
             current_x += tick_interval_x
 
         # Отметки по оси Z
-        tick_interval_z = 50
-        current_z = 0
-        while current_z <= max_z:
-            tick_pt = self.project_point(min_x, min_y, current_z, offset)
-            dx = z_end.x() - origin.x()
-            dy = z_end.y() - origin.y()
-            length = math.hypot(dx, dy)
-            perp = QPointF(-dy / length, dx / length) if length != 0 else QPointF(0, 0)
-            tick_start = QPointF(tick_pt.x() + perp.x() * tick_length, tick_pt.y() + perp.y() * tick_length)
-            tick_end = QPointF(tick_pt.x() - perp.x() * tick_length, tick_pt.y() - perp.y() * tick_length)
-            painter.drawLine(tick_start, tick_end)
-            painter.drawText(tick_pt + QPointF(5, 5), f"{current_z:.0f}")
+        tick_interval_z = (z_max - z_min) / 5
+        current_z = z_min
+        while current_z <= z_max:
+            tick_pt = self.project_point(x_min, 0, current_z, offset)
+            painter.drawText(tick_pt + QPointF(5, 5), f"{current_z / 50:.1f}")  # Делим обратно на scale
             current_z += tick_interval_z
 
     def draw_arrow(self, painter, start, end):
@@ -250,14 +229,24 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("3D Гистограмма с накоплением и вращением")
         self.tab_widget = QTabWidget()
         self.setCentralWidget(self.tab_widget)
-        self.initUI()
+        self.initUI(data)
 
-    def initUI(self):
-        # График с демонстрацией накопления
-        bars_stacked = generate_bars_from_data(data, bar_spacing=10)
-        graph_stacked = GraphWidget(bars_stacked, draw_axes_after=False)
+    def initUI(self, data):
+        x_min_index, x_max_index = get_x_range(data["x"])
+        z_min, z_max = get_function_range(data["functions"])
+
+        # Корректируем x_min и x_max (в пикселях для графика)
+        x_min = 0
+        x_max = (x_max_index - x_min_index) * (10 + 2)  # bar_width=10, bar_spacing=2
+
+        # Учитываем масштабирование Z
+        z_min *= 50
+        z_max *= 50
+
+        bars_stacked = generate_bars_from_data(data, bar_spacing=5)
+        graph_stacked = GraphWidget(bars_stacked, x_min, x_max, z_min, z_max, draw_axes_after=False)
+
         self.tab_widget.addTab(graph_stacked, "Stacked Demo")
-        # Можно добавить дополнительные вкладки с другими данными
 
 
 if __name__ == '__main__':
