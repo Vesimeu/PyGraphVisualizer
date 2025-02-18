@@ -1,5 +1,6 @@
 import sys
 import math
+import json
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QTabWidget
 from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen
 from PySide6.QtCore import Qt, QPointF
@@ -210,20 +211,37 @@ class GraphWidget(QWidget):
 
 
 # Функция для генерации баров с накоплением (две сегмента в каждом баре)
-def generate_bars_stacked(num_bars=20, bar_width=20, bar_depth=20, scale=50):
-    bars = []
-    gap = 10
-    for i in range(num_bars):
-        x = i * (bar_width + gap)
-        y = 0
-        angle = i * (2 * math.pi / (num_bars - 1))
-        # Демонстрация накопления: два сегмента (70% и 30% от общего значения)
-        total = (math.sin(angle) + 1) * scale  # значение от 0 до 2*scale
-        lower = total * 0.7
-        upper = total * 0.3
-        bars.append(Bar(x, y, bar_width, bar_depth, [(lower, QColor(200, 0, 0)), (upper, QColor(0, 0, 200))]))
-    return bars
+def load_data(filename):
+    with open(filename, 'r') as file:
+        return json.load(file)
 
+"""""
+ bar_spacing - расстояние между столбиками. 
+"""
+def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=50, bar_spacing=2):
+    bars = []
+    x_values = data["x"]
+    functions = data["functions"]
+
+    colors = [QColor(200, 0, 0), QColor(0, 0, 200), QColor(0, 200, 0)]
+
+    num_functions = len(functions)
+    function_names = list(functions.keys())
+
+    for i, x in enumerate(x_values):
+        y = 0  # по Y всё на одной линии
+        segments = []
+        base_z = 0
+
+        for j, func_name in enumerate(function_names):
+            value = functions[func_name][i] * scale
+            segments.append((value, colors[j % len(colors)]))
+            base_z += value
+
+        # Используем bar_spacing для регулирования расстояния между столбцами
+        bars.append(Bar(i * (bar_width + bar_spacing), y, bar_width, bar_depth, segments))
+
+    return bars
 
 # Главное окно с вкладками
 class MainWindow(QMainWindow):
@@ -236,13 +254,14 @@ class MainWindow(QMainWindow):
 
     def initUI(self):
         # График с демонстрацией накопления
-        bars_stacked = generate_bars_stacked(num_bars=20, bar_width=20, bar_depth=20, scale=50)
+        bars_stacked = generate_bars_from_data(data, bar_spacing=10)
         graph_stacked = GraphWidget(bars_stacked, draw_axes_after=False)
         self.tab_widget.addTab(graph_stacked, "Stacked Demo")
         # Можно добавить дополнительные вкладки с другими данными
 
 
 if __name__ == '__main__':
+    data = load_data("data.json")
     app = QApplication(sys.argv)
     window = MainWindow()
     window.resize(800, 600)
