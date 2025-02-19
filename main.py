@@ -137,7 +137,7 @@ class GraphWidget(QWidget):
         self.draw_arrow(painter, origin, x_end)
 
         # Ось Z
-        z_end = self.project_point(x_min, 0, z_max, offset)
+        z_end = self.project_point(z_min, 0, z_max, offset)
         painter.drawLine(origin, z_end)
         self.draw_arrow(painter, origin, z_end)
 
@@ -172,13 +172,13 @@ class GraphWidget(QWidget):
         for i in range(0, len(x_values), x_tick_step):
             x_pos = self.bars[i].x + self.bars[i].width / 2
             tick_pt = self.project_point(x_pos, 0, 0, offset)
-            painter.drawText(tick_pt + QPointF(-10, 25), f"{x_values[i]:.1f}")
+            painter.drawText(tick_pt + QPointF(-10, 75), f"{x_values[i]:.1f}")
 
-        # Подписи оси Z
+        # Подписи оси Z (Или по другому, ось Y - Область определния функций)
         current_z = z_min
         while current_z <= z_max:
             tick_pt = self.project_point(x_min, 0, current_z, offset)
-            painter.drawText(tick_pt + QPointF(-25, 0), f"{current_z / 50:.2f}")
+            painter.drawText(tick_pt + QPointF(-35, 0), f"{current_z / 50:.2f}")
             current_z += tick_interval_z
 
     def draw_arrow(self, painter, start, end):
@@ -225,7 +225,7 @@ def load_data(filename):
 """""
  bar_spacing - расстояние между столбиками. 
 """
-def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=50, bar_spacing=5):
+def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=38, bar_spacing=5):
     bars = []
     x_values = data["x"]
     functions = data["functions"]
