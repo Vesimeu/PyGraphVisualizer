@@ -142,7 +142,7 @@ class GraphWidget(QWidget):
         self.draw_arrow(painter, origin, z_end)
 
         # Добавляем светлую линию поверх осей (имитация объёмности)
-        shadow_pen = QPen(QColor(200, 200, 200), 2, Qt.DashLine)
+        shadow_pen = QPen(QColor(100, 200, 300), 2, Qt.DashLine)
         painter.setPen(shadow_pen)
         painter.drawLine(origin + QPointF(1, 1), x_end + QPointF(1, 1))
         painter.drawLine(origin + QPointF(1, 1), z_end + QPointF(1, 1))
@@ -154,7 +154,7 @@ class GraphWidget(QWidget):
         # Вертикальные линии сетки (по X)
         for i in range(0, len(x_values), x_tick_step):
             x_pos = self.bars[i].x + self.bars[i].width / 2
-            grid_start = self.project_point(x_pos, 0, 0, offset)
+            grid_start = self.project_point(x_pos , 0, z_min, offset)
             grid_end = self.project_point(x_pos, 0, z_max, offset)
             painter.drawLine(grid_start, grid_end)
 
@@ -163,7 +163,7 @@ class GraphWidget(QWidget):
         current_z = z_min
         while current_z <= z_max:
             grid_start = self.project_point(x_min, 0, current_z, offset)
-            grid_end = self.project_point(x_max, 0, current_z, offset)
+            grid_end = self.project_point(x_max + x_pos, 0, current_z, offset)
             painter.drawLine(grid_start, grid_end)
             current_z += tick_interval_z
 
