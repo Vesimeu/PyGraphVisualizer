@@ -4,12 +4,9 @@ def get_x_range(x_values):
 
 
 def get_function_range(functions):
-    """Возвращает минимальное и максимальное значение для оси Z (значений функций)."""
-    min_val = float('inf')
-    max_val = float('-inf')
-
-    for func_values in functions.values():
-        min_val = min(min_val, min(func_values))
-        max_val = max(max_val, max(func_values))
-
-    return min_val, max_val
+    # Получаем количество точек (длина массива значений одной из функций)
+    num_points = len(next(iter(functions.values())))
+    # Вычисляем сумму значений функций для каждого x
+    sums = [sum(functions[func][i] for func in functions) for i in range(num_points)]
+    # Возвращаем минимальное и максимальное значения среди сумм
+    return min(sums), max(sums)

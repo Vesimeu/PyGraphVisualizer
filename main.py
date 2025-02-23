@@ -225,7 +225,7 @@ def load_data(filename):
 """""
  bar_spacing - расстояние между столбиками. 
 """
-def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=38, bar_spacing=5):
+def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=50, bar_spacing=5):
     bars = []
     x_values = data["x"]
     functions = data["functions"]
@@ -277,7 +277,7 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
-    data = load_data("data.json")
+    data = load_data("../data.json")
     app = QApplication(sys.argv)
     window = MainWindow()
     window.resize(800, 600)
