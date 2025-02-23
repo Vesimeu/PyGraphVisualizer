@@ -11,6 +11,6 @@ Graph Visualizer With PySide6
 # Данные загружаются из data.json, где хранятся значения x и функции.
 
 # Пример испрользования программы, x лежит в пределах от -10 до 10. Функции cos(x), sin(x)
-![img.png](img.png)
 ![img_1.png](img_1.png)
+![img.png](img.png)
 ![img_2.png](img_2.png)

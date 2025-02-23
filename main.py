@@ -22,10 +22,10 @@ class Bar:
         self.segments = segments
 
 
-# Виджет для отрисовки одного графика с возможностью интерактивного вращения
+# Виджет для отрисовки одного графика с возможностью интерактивного вращения и перемещения
 class GraphWidget(QWidget):
-    def __init__(self, bars, x_min=None, x_max=None, z_min=None, z_max=None, x_values=None, draw_axes_after=False,
-                 parent=None):
+    def __init__(self, bars, x_min=None, x_max=None, z_min=None, z_max=None, x_values=None, legend_items=None,
+                 draw_axes_after=False, parent=None):
         super().__init__(parent)
         self.bars = bars
         self.x_values = x_values
@@ -38,6 +38,9 @@ class GraphWidget(QWidget):
         self.x_max = x_max
         self.z_min = z_min
         self.z_max = z_max
+        self.legend_items = legend_items if legend_items is not None else []  # Элементы легенды
+        self.x_offset = 0  # Смещение по X для перемещения камеры
+        self.y_offset = 0  # Смещение по Y для перемещения камеры
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -45,23 +48,40 @@ class GraphWidget(QWidget):
         # Центрирование рисунка в окне
         center_offset = QPointF(self.width() / 2, self.height() / 2)
 
-        # Если оси нужно рисовать на заднем плане, то сначала рисуем оси
+        # Рисуем оси на заднем плане, если нужно
         if not self.draw_axes_after:
             self.draw_axes(painter, center_offset, self.x_min, self.x_max, self.z_min, self.z_max, self.x_values)
 
-
-        # Отрисовка баров (накопление реализовано путем последовательного сложения сегментов)
+        # Отрисовка баров
         for bar in self.bars:
-            base_z = 0  # начальная высота для накопления сегментов
+            base_z = 0
             for (h, color) in bar.segments:
                 self.draw_cuboid(painter, bar.x, bar.y, base_z, bar.width, bar.depth, h, center_offset, color)
-                base_z += h  # следующий сегмент располагается выше предыдущего
+                base_z += h
 
-        # Если оси нужно рисовать поверх, то делаем это после баров
+        # Рисуем оси поверх баров, если нужно
         if self.draw_axes_after:
             self.draw_axes(painter, center_offset, self.x_min, self.x_max, self.z_min, self.z_max, self.x_values)
 
+        # Рисуем легенду
+        if self.legend_items:
+            self.draw_legend(painter)
+
         painter.end()
+
+    def draw_legend(self, painter):
+        """Рисует легенду в правом верхнем углу."""
+        legend_x = self.width() - 150  # Отступ от правого края
+        legend_y = 10  # Отступ сверху
+        box_size = 20  # Размер цветного квадрата
+        spacing = 5  # Расстояние между элементами
+        for i, (name, color) in enumerate(self.legend_items):
+            # Цветной квадрат
+            painter.setBrush(QBrush(color))
+            painter.drawRect(legend_x, legend_y + i * (box_size + spacing), box_size, box_size)
+            # Текст
+            painter.setPen(QPen(Qt.black))
+            painter.drawText(legend_x + box_size + 5, legend_y + i * (box_size + spacing) + box_size / 2 + 5, name)
 
     def wheelEvent(self, event):
         """Обрабатывает прокрутку колесика мыши для масштабирования графика."""
@@ -74,7 +94,7 @@ class GraphWidget(QWidget):
         self.update()
 
     def project_point(self, x, y, z, offset):
-        """Проецирует 3D точку (x, y, z) на 2D экран с учетом вращения и масштабирования."""
+        """Проецирует 3D точку на 2D экран с учётом вращения, масштабирования и смещения."""
         rad_az = math.radians(self.azimuth)
         X1 = x * math.cos(rad_az) - y * math.sin(rad_az)
         Y1 = x * math.sin(rad_az) + y * math.cos(rad_az)
@@ -82,13 +102,12 @@ class GraphWidget(QWidget):
         rad_el = math.radians(self.elevation)
         Y2 = Y1 * math.cos(rad_el) - Z1 * math.sin(rad_el)
         Z2 = Y1 * math.sin(rad_el) + Z1 * math.cos(rad_el)
-
-        # Учитываем масштабирование
-        return QPointF((X1 * self.scale_factor) + offset.x(),
-                       (Y2 * self.scale_factor) + offset.y())
+        # Добавляем смещение камеры
+        screen_x = X1 * self.scale_factor + offset.x() + self.x_offset
+        screen_y = Y2 * self.scale_factor + offset.y() + self.y_offset
+        return QPointF(screen_x, screen_y)
 
     def draw_cuboid(self, painter, x, y, z, w, d, h, offset, color):
-        # Вычисляем 8 вершин параллелепипеда
         vertices = {}
         vertices['A'] = self.project_point(x, y, z, offset)
         vertices['B'] = self.project_point(x + w, y, z, offset)
@@ -99,23 +118,18 @@ class GraphWidget(QWidget):
         vertices['G'] = self.project_point(x + w, y + d, z + h, offset)
         vertices['H'] = self.project_point(x, y + d, z + h, offset)
 
-        # Рисуем три видимые грани: верхнюю, правую и левую
-        # Верхняя грань
         top_face = [vertices[k] for k in ['E', 'F', 'G', 'H']]
         painter.setBrush(QBrush(color.lighter(120)))
         painter.drawPolygon(QPolygonF(top_face))
 
-        # Правая грань
         right_face = [vertices[k] for k in ['B', 'C', 'G', 'F']]
         painter.setBrush(QBrush(color.darker(120)))
         painter.drawPolygon(QPolygonF(right_face))
 
-        # Левая грань
         left_face = [vertices[k] for k in ['A', 'D', 'H', 'E']]
         painter.setBrush(QBrush(color))
         painter.drawPolygon(QPolygonF(left_face))
 
-        # Дополнительная фронтальная грань (вдоль высоты)
         front_face = [vertices[k] for k in ['A', 'B', 'F', 'E']]
         painter.setBrush(QBrush(color.darker(150)))
         painter.drawPolygon(QPolygonF(front_face))
@@ -137,29 +151,26 @@ class GraphWidget(QWidget):
         self.draw_arrow(painter, origin, x_end)
 
         # Ось Z
-        z_end = self.project_point(z_min, 0, z_max, offset)
+        z_end = self.project_point(x_min, 0, z_max, offset)
         painter.drawLine(origin, z_end)
         self.draw_arrow(painter, origin, z_end)
 
-        # Добавляем светлую линию поверх осей (имитация объёмности)
-        shadow_pen = QPen(QColor(100, 200, 300), 2, Qt.DashLine)
-        painter.setPen(shadow_pen)
-        painter.drawLine(origin + QPointF(1, 1), x_end + QPointF(1, 1))
-        painter.drawLine(origin + QPointF(1, 1), z_end + QPointF(1, 1))
 
-        # Вспомогательная пунктирная сетка
-        grid_pen = QPen(QColor(150, 150, 150), 1, Qt.DashLine)
+
+        # Вспомогательная сетка с контрастным цветом и сплошными линиями
+        grid_pen = QPen(QColor(255, 255, 255), 1, Qt.SolidLine)  # Белый цвет, сплошная линия
         painter.setPen(grid_pen)
 
         # Вертикальные линии сетки (по X)
         for i in range(0, len(x_values), x_tick_step):
             x_pos = self.bars[i].x + self.bars[i].width / 2
-            grid_start = self.project_point(x_pos , 0, z_min, offset)
+            grid_start = self.project_point(x_pos, 0, z_min, offset)
             grid_end = self.project_point(x_pos, 0, z_max, offset)
             painter.drawLine(grid_start, grid_end)
 
-        # Горизонтальные линии сетки (по Z)
-        tick_interval_z = (z_max - z_min) / 5
+        # Горизонтальные линии сетки (по Z) с большим количеством линий
+        num_z_ticks = 10  # Увеличиваем количество линий
+        tick_interval_z = (z_max - z_min) / num_z_ticks
         current_z = z_min
         while current_z <= z_max:
             grid_start = self.project_point(x_min, 0, current_z, offset)
@@ -174,7 +185,7 @@ class GraphWidget(QWidget):
             tick_pt = self.project_point(x_pos, 0, 0, offset)
             painter.drawText(tick_pt + QPointF(-10, 75), f"{x_values[i]:.1f}")
 
-        # Подписи оси Z (Или по другому, ось Y - Область определния функций)
+        # Подписи оси Z
         current_z = z_min
         while current_z <= z_max:
             tick_pt = self.project_point(x_min, 0, current_z, offset)
@@ -182,9 +193,6 @@ class GraphWidget(QWidget):
             current_z += tick_interval_z
 
     def draw_arrow(self, painter, start, end):
-        """
-        Рисует стрелку на конце линии.
-        """
         line_vec = QPointF(end.x() - start.x(), end.y() - start.y())
         length = math.hypot(line_vec.x(), line_vec.y())
         if length == 0:
@@ -210,32 +218,34 @@ class GraphWidget(QWidget):
         if self.last_mouse_pos is not None:
             dx = event.x() - self.last_mouse_pos.x()
             dy = event.y() - self.last_mouse_pos.y()
-            # Изменяем азимут и угол наклона пропорционально смещению мыши
-            self.azimuth += dx * 0.5
-            self.elevation += dy * 0.5
+            if event.modifiers() & Qt.ShiftModifier:
+                # Перемещаем камеру при зажатом Shift
+                self.x_offset += dx
+                self.y_offset += dy
+            else:
+                # Вращаем график без Shift
+                self.azimuth += dx * 0.5
+                self.elevation += dy * 0.5
             self.last_mouse_pos = event.pos()
             self.update()
 
 
-# Функция для генерации баров с накоплением (две сегмента в каждом баре)
+# Функция для генерации баров с накоплением
 def load_data(filename):
     with open(filename, 'r') as file:
         return json.load(file)
 
-"""""
- bar_spacing - расстояние между столбиками. 
-"""
+
 def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=50, bar_spacing=5):
     bars = []
     x_values = data["x"]
     functions = data["functions"]
 
     colors = [QColor(200, 0, 0), QColor(0, 0, 200), QColor(0, 200, 0)]
-    num_functions = len(functions)
     function_names = list(functions.keys())
 
     for i, x in enumerate(x_values):
-        y = 0  # все столбцы на одной линии
+        y = 0
         segments = []
         base_z = 0
 
@@ -244,9 +254,7 @@ def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=50, bar_spac
             segments.append((value, colors[j % len(colors)]))
             base_z += value
 
-        # Смещаем x-координату с учетом шага между столбцами
         x_position = i * (bar_width + bar_spacing)
-
         bars.append(Bar(x_position, y, bar_width, bar_depth, segments))
 
     return bars
@@ -262,16 +270,19 @@ class MainWindow(QMainWindow):
         self.initUI(data)
 
     def initUI(self, data):
-        x_min, x_max = get_x_range(data["x"])  # Берём реальные границы X
+        x_min, x_max = get_x_range(data["x"])
         z_min, z_max = get_function_range(data["functions"])
-
-        # Масштабируем Z
         z_min *= 50
         z_max *= 50
 
-        bars_stacked = generate_bars_from_data(data, bar_spacing=2)
-        graph_stacked = GraphWidget(bars_stacked, x_min, x_max, z_min, z_max, data["x"], draw_axes_after=False)
+        # Создаём элементы легенды
+        colors = [QColor(200, 0, 0), QColor(0, 0, 200), QColor(0, 200, 0)]
+        function_names = list(data["functions"].keys())
+        legend_items = list(zip(function_names, colors[:len(function_names)]))
 
+        bars_stacked = generate_bars_from_data(data, bar_spacing=2)
+        graph_stacked = GraphWidget(bars_stacked, x_min, x_max, z_min, z_max, data["x"], legend_items,
+                                    draw_axes_after=False)
 
         self.tab_widget.addTab(graph_stacked, "Stacked Demo")
 
