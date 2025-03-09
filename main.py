@@ -6,6 +6,9 @@ from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen
 from PySide6.QtCore import Qt, QPointF
 from utils import get_x_range, get_function_range
 
+#Это коэффициент от которого зависит масштаб
+koef = 10
+
 
 # Класс для представления отдельного столбца (бара) гистограммы
 class Bar:
@@ -150,12 +153,10 @@ class GraphWidget(QWidget):
         painter.drawLine(origin, x_end)
         self.draw_arrow(painter, origin, x_end)
 
-        # Ось Z
+        # Ось Z (ось Y)
         z_end = self.project_point(x_min, 0, z_max, offset)
         painter.drawLine(origin, z_end)
         self.draw_arrow(painter, origin, z_end)
-
-
 
         # Вспомогательная сетка с контрастным цветом и сплошными линиями
         grid_pen = QPen(QColor(255, 255, 255), 1, Qt.SolidLine)  # Белый цвет, сплошная линия
@@ -174,7 +175,7 @@ class GraphWidget(QWidget):
         current_z = z_min
         while current_z <= z_max:
             grid_start = self.project_point(x_min, 0, current_z, offset)
-            grid_end = self.project_point(x_max + x_pos, 0, current_z, offset)
+            grid_end = self.project_point(x_max + x_pos, 0, current_z, offset) #Добавлю x_pos для "сетки"
             painter.drawLine(grid_start, grid_end)
             current_z += tick_interval_z
 
@@ -185,7 +186,7 @@ class GraphWidget(QWidget):
             tick_pt = self.project_point(x_pos, 0, 0, offset)
             painter.drawText(tick_pt + QPointF(-10, 75), f"{x_values[i]:.1f}")
 
-        # Подписи оси Z
+        # Подписи оси Z(или ось Y = значения функций)
         current_z = z_min
         while current_z <= z_max:
             tick_pt = self.project_point(x_min, 0, current_z, offset)
@@ -236,7 +237,7 @@ def load_data(filename):
         return json.load(file)
 
 
-def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=50, bar_spacing=5):
+def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=koef, bar_spacing=5):
     bars = []
     x_values = data["x"]
     functions = data["functions"]
@@ -272,8 +273,8 @@ class MainWindow(QMainWindow):
     def initUI(self, data):
         x_min, x_max = get_x_range(data["x"])
         z_min, z_max = get_function_range(data["functions"])
-        z_min *= 50
-        z_max *= 50
+        z_min *= koef
+        z_max *= koef
 
         # Создаём элементы легенды
         colors = [QColor(200, 0, 0), QColor(0, 0, 200), QColor(0, 200, 0)]
