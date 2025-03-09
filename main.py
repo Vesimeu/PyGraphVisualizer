@@ -2,12 +2,14 @@ import sys
 import math
 import json
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QTabWidget
-from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen
+from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen, QFont
 from PySide6.QtCore import Qt, QPointF
-from utils import get_x_range, get_function_range
+from utils import get_x_range, get_function_range,calculate_koef,load_data
 
+data = load_data("../data.json")
 #Это коэффициент от которого зависит масштаб
-koef = 10
+koef = calculate_koef(data, 50)
+print("LOGGING коэф масшатбирования: ", koef)
 
 
 # Класс для представления отдельного столбца (бара) гистограммы
@@ -140,7 +142,7 @@ class GraphWidget(QWidget):
     def draw_axes(self, painter, offset, x_min, x_max, z_min, z_max, x_values, x_tick_step=2):
         if not self.bars:
             return
-
+        painter.setFont(QFont("Arial", 10, QFont.Bold))
         # Цвет осей - тёмно-серый, толщина 5px
         axis_pen = QPen(QColor(50, 50, 50), 5)
         painter.setPen(axis_pen)
@@ -170,7 +172,7 @@ class GraphWidget(QWidget):
             painter.drawLine(grid_start, grid_end)
 
         # Горизонтальные линии сетки (по Z) с большим количеством линий
-        num_z_ticks = 10  # Увеличиваем количество линий
+        num_z_ticks = 12  # Увеличиваем количество линий
         tick_interval_z = (z_max - z_min) / num_z_ticks
         current_z = z_min
         while current_z <= z_max:
@@ -180,17 +182,18 @@ class GraphWidget(QWidget):
             current_z += tick_interval_z
 
         # Подписи оси X
-        painter.setPen(QPen(Qt.black, 2))
+        painter.setPen(QPen(Qt.black, 3))
         for i in range(0, len(x_values), x_tick_step):
             x_pos = self.bars[i].x + self.bars[i].width / 2
             tick_pt = self.project_point(x_pos, 0, 0, offset)
             painter.drawText(tick_pt + QPointF(-10, 75), f"{x_values[i]:.1f}")
 
         # Подписи оси Z(или ось Y = значения функций)
-        current_z = z_min
+        current_z = z_min + 2
+        z_max+=10
         while current_z <= z_max:
             tick_pt = self.project_point(x_min, 0, current_z, offset)
-            painter.drawText(tick_pt + QPointF(-35, 0), f"{current_z / 50:.2f}")
+            painter.drawText(tick_pt + QPointF(-35, 0), f"{current_z / koef:.2f}")
             current_z += tick_interval_z
 
     def draw_arrow(self, painter, start, end):
@@ -231,12 +234,6 @@ class GraphWidget(QWidget):
             self.update()
 
 
-# Функция для генерации баров с накоплением
-def load_data(filename):
-    with open(filename, 'r') as file:
-        return json.load(file)
-
-
 def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=koef, bar_spacing=5):
     bars = []
     x_values = data["x"]
@@ -245,6 +242,8 @@ def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=koef, bar_sp
     colors = [QColor(200, 0, 0), QColor(0, 0, 200), QColor(0, 200, 0)]
     function_names = list(functions.keys())
 
+    # Сдвигаем начальную позицию влево, добавляя отрицательное смещение
+    x_offset = -5
     for i, x in enumerate(x_values):
         y = 0
         segments = []
@@ -255,7 +254,8 @@ def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=koef, bar_sp
             segments.append((value, colors[j % len(colors)]))
             base_z += value
 
-        x_position = i * (bar_width + bar_spacing)
+        # Вычисляем x_position с учётом смещения
+        x_position = x_offset + i * (bar_width + bar_spacing)
         bars.append(Bar(x_position, y, bar_width, bar_depth, segments))
 
     return bars
