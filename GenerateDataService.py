@@ -30,7 +30,7 @@ def generate_data():
         except Exception as e:
             print(f"Ошибка в функции '{func}': {e}")
 
-    with open("../data.json", "w") as f:
+    with open("data4.json", "w") as f:
         json.dump(data, f, indent=4)
 
     print("Данные успешно сохранены в data.json")

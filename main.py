@@ -1,3 +1,4 @@
+import logging
 import sys
 import math
 import json
@@ -6,7 +7,7 @@ from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen, QFont
 from PySide6.QtCore import Qt, QPointF
 from utils import get_x_range, get_function_range,calculate_koef,load_data
 
-data = load_data("../data.json")
+data = load_data("data3.json")
 #Это коэффициент от которого зависит масштаб
 koef = calculate_koef(data, 50)
 print("LOGGING коэф масшатбирования: ", koef)
@@ -171,13 +172,19 @@ class GraphWidget(QWidget):
             grid_end = self.project_point(x_pos, 0, z_max, offset)
             painter.drawLine(grid_start, grid_end)
 
+        # Добавляем последнюю вертикальную линию сетки для последнего бара
+        last_x_pos = self.bars[-1].x + self.bars[-1].width / 2
+        last_grid_start = self.project_point(last_x_pos, 0, z_min, offset)
+        last_grid_end = self.project_point(last_x_pos, 0, z_max, offset)
+        painter.drawLine(last_grid_start, last_grid_end)
+
         # Горизонтальные линии сетки (по Z) с большим количеством линий
         num_z_ticks = 12  # Увеличиваем количество линий
         tick_interval_z = (z_max - z_min) / num_z_ticks
-        current_z = z_min
+        current_z = z_min-1
         while current_z <= z_max:
             grid_start = self.project_point(x_min, 0, current_z, offset)
-            grid_end = self.project_point(x_max + x_pos, 0, current_z, offset) #Добавлю x_pos для "сетки"
+            grid_end = self.project_point(last_x_pos, 0, current_z, offset)  # Исправляем: убираем x_pos
             painter.drawLine(grid_start, grid_end)
             current_z += tick_interval_z
 
@@ -188,10 +195,16 @@ class GraphWidget(QWidget):
             tick_pt = self.project_point(x_pos, 0, 0, offset)
             painter.drawText(tick_pt + QPointF(-10, 75), f"{x_values[i]:.1f}")
 
-        # Подписи оси Z(или ось Y = значения функций)
-        current_z = z_min + 2
-        z_max+=10
-        while current_z <= z_max:
+        # Добавляем последнюю метку вручную, если она не попадает в цикл
+        last_x_pos = self.bars[-1].x + self.bars[-1].width / 2
+        last_tick_pt = self.project_point(last_x_pos, 0, 0, offset)
+        painter.drawText(last_tick_pt + QPointF(-10, 75), f"{x_values[-1]:.1f}")
+
+        # Подписи оси Z (или ось Y = значения функций)
+        painter.setPen(QPen(Qt.black, 3))
+        tick_interval_z = (z_max - z_min) / num_z_ticks  # Шаг разметки
+        current_z = z_min  # Начинаем с минимального значения
+        while current_z <= z_max + tick_interval_z / 2:  # Добавляем небольшой запас для включения z_max
             tick_pt = self.project_point(x_min, 0, current_z, offset)
             painter.drawText(tick_pt + QPointF(-35, 0), f"{current_z / koef:.2f}")
             current_z += tick_interval_z
@@ -273,6 +286,8 @@ class MainWindow(QMainWindow):
     def initUI(self, data):
         x_min, x_max = get_x_range(data["x"])
         z_min, z_max = get_function_range(data["functions"])
+        print("Значения x min:" , x_min , "\nЗначение x max:" , x_max)
+        print("Значение z min:" , z_min, "\nЗначение z max:" , z_max)
         z_min *= koef
         z_max *= koef
 
@@ -289,9 +304,10 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
-    data = load_data("../data.json")
     app = QApplication(sys.argv)
     window = MainWindow()
     window.resize(800, 600)
     window.show()
     sys.exit(app.exec())
+    
+# Положительные отричательные + по значениям .

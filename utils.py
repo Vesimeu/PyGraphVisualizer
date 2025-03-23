@@ -12,6 +12,7 @@ def get_function_range(functions):
     # Вычисляем сумму значений функций для каждого x
     sums = [sum(functions[func][i] for func in functions) for i in range(num_points)]
     # Возвращаем минимальное и максимальное значения среди сумм
+    #TODO: добавить ноль
     return min(sums), max(sums)
 
 
