@@ -7,7 +7,7 @@ from PySide6.QtGui import QPainter, QBrush, QColor, QPolygonF, QPen, QFont
 from PySide6.QtCore import Qt, QPointF
 from utils import get_x_range, get_function_range,calculate_koef,load_data
 
-data = load_data("data3.json")
+data = load_data("data5.json")
 #Это коэффициент от которого зависит масштаб
 koef = calculate_koef(data, 50)
 print("LOGGING коэф масшатбирования: ", koef)
@@ -60,10 +60,20 @@ class GraphWidget(QWidget):
 
         # Отрисовка баров
         for bar in self.bars:
-            base_z = 0
-            for (h, color) in bar.segments:
-                self.draw_cuboid(painter, bar.x, bar.y, base_z, bar.width, bar.depth, h, center_offset, color)
-                base_z += h
+            # Разделяем сегменты на положительные и отрицательные
+            positive_base_z = 0  # Начало для положительных сегментов
+            negative_base_z = 0  # Начало для отрицательных сегментов
+            for h, color in bar.segments:
+                if h >= 0:
+                    # Положительный сегмент: рисуем вверх от positive_base_z
+                    self.draw_cuboid(painter, bar.x, bar.y, positive_base_z, bar.width, bar.depth, h, center_offset,
+                                     color)
+                    positive_base_z += h
+                else:
+                    # Отрицательный сегмент: рисуем вниз от negative_base_z
+                    self.draw_cuboid(painter, bar.x, bar.y, negative_base_z, bar.width, bar.depth, h, center_offset,
+                                     color)
+                    negative_base_z += h
 
         # Рисуем оси поверх баров, если нужно
         if self.draw_axes_after:
@@ -124,21 +134,37 @@ class GraphWidget(QWidget):
         vertices['G'] = self.project_point(x + w, y + d, z + h, offset)
         vertices['H'] = self.project_point(x, y + d, z + h, offset)
 
-        top_face = [vertices[k] for k in ['E', 'F', 'G', 'H']]
-        painter.setBrush(QBrush(color.lighter(120)))
-        painter.drawPolygon(QPolygonF(top_face))
+        # Определяем грани
+        top_face = [vertices[k] for k in ['E', 'F', 'G', 'H']]  # Верхняя грань
+        bottom_face = [vertices[k] for k in ['A', 'B', 'C', 'D']]  # Нижняя грань
+        right_face = [vertices[k] for k in ['B', 'C', 'G', 'F']]  # Правая грань
+        left_face = [vertices[k] for k in ['A', 'D', 'H', 'E']]  # Левая грань
+        front_face = [vertices[k] for k in ['A', 'B', 'F', 'E']]  # Передняя грань
+        back_face = [vertices[k] for k in ['D', 'C', 'G', 'H']]  # Задняя грань
 
-        right_face = [vertices[k] for k in ['B', 'C', 'G', 'F']]
-        painter.setBrush(QBrush(color.darker(120)))
-        painter.drawPolygon(QPolygonF(right_face))
+        # Определяем порядок отрисовки граней в зависимости от угла обзора
+        faces = [
+            (top_face, color.lighter(120)),  # Верхняя грань
+            (bottom_face, color.darker(180)),  # Нижняя грань
+            (right_face, color.darker(120)),  # Правая грань
+            (left_face, color),  # Левая грань
+            (front_face, color.darker(150)),  # Передняя грань
+            (back_face, color.darker(100))  # Задняя грань
+        ]
 
-        left_face = [vertices[k] for k in ['A', 'D', 'H', 'E']]
-        painter.setBrush(QBrush(color))
-        painter.drawPolygon(QPolygonF(left_face))
+        # Простая сортировка граней по средней Z-координате (для корректного наложения)
+        # Мы будем использовать среднюю Y-координату на экране (в 2D) как индикатор глубины
+        def get_face_depth(face):
+            avg_y = sum(point.y() for point in face) / len(face)
+            return avg_y
 
-        front_face = [vertices[k] for k in ['A', 'B', 'F', 'E']]
-        painter.setBrush(QBrush(color.darker(150)))
-        painter.drawPolygon(QPolygonF(front_face))
+        # Сортируем грани: те, что дальше (с большим значением Y на экране), рисуем первыми
+        faces.sort(key=lambda f: get_face_depth(f[0]), reverse=True)
+
+        # Отрисовываем грани в отсортированном порядке
+        for face, face_color in faces:
+            painter.setBrush(QBrush(face_color))
+            painter.drawPolygon(QPolygonF(face))
 
     def draw_axes(self, painter, offset, x_min, x_max, z_min, z_max, x_values, x_tick_step=2):
         if not self.bars:
@@ -259,12 +285,29 @@ def generate_bars_from_data(data, bar_width=10, bar_depth=10, scale=koef, bar_sp
     x_offset = -5
     for i, x in enumerate(x_values):
         y = 0
-        segments = []
-        base_z = 0
+        # Разделяем значения на положительные и отрицательные
+        positive_segments = []  # Для значений > 0
+        negative_segments = []  # Для значений < 0
 
         for j, func_name in enumerate(function_names):
             value = functions[func_name][i] * scale
-            segments.append((value, colors[j % len(colors)]))
+            if value >= 0:
+                positive_segments.append((value, colors[j % len(colors)]))
+            else:
+                negative_segments.append((value, colors[j % len(colors)]))
+
+        # Собираем итоговые сегменты
+        segments = []
+        # Сначала добавляем отрицательные сегменты (вниз от z=0)
+        base_z = 0
+        for value, color in negative_segments:
+            segments.append((value, color))
+            base_z += value  # base_z становится отрицательным
+
+        # Добавляем положительные сегменты (вверх от z=0)
+        base_z = 0  # Сбрасываем base_z на 0
+        for value, color in positive_segments:
+            segments.append((value, color))
             base_z += value
 
         # Вычисляем x_position с учётом смещения
